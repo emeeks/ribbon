@@ -1,0 +1,163 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>Ribbon Visualization</title>
+  <meta charset="utf-8" />
+</head>
+<script src="d3.v3.min.js"></script>
+<script src="colorbrewer.js"></script>
+<script src="queue.js"></script>
+<style>
+  body, html {
+    width:100%;
+    height:100%;
+  }
+  #vizcontainer {
+    width:100%;
+    height:100%;
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+  line {
+    shape-rendering: crispEdges;
+  }
+
+
+  path.domain {
+    fill: none;
+  }
+  g.tick > line {
+    stroke: gray;
+    stroke-width: 1px;
+  }
+  button {
+    position: fixed;
+    top: 20px;
+  }
+  #hoverDetails {
+    position: fixed;
+    z-index: 3;
+    bottom: 20px;
+    left: 20px;
+  }
+  rect.bg {
+    fill-opacity: 0.02;
+  }
+  
+  line {
+    stroke: lightgray;
+    stroke-width: 1px;
+  }
+</style>
+<body onload="forceNotes();">
+
+<div id="vizcontainer">
+<svg>
+</svg>
+</div>
+<div id="hoverDetails"></div>
+  <footer>
+<script>
+  function forceNotes() {
+    var dsv = d3.dsv(" ", "text/plain");
+    dsv("dunhill.txt", createForceNote);
+
+  }
+  function createForceNote(data) {
+
+  staffScale = d3.scale.linear().domain([1,4]).range([400,100]);
+  xScale = d3.scale.linear().domain([0,200]).range([0,600]);
+    var nodes = [];
+    var links = [];
+    xHash = {};
+    firstNotes = {};
+    lastNotes = {};
+
+    for (x in data) {
+      if (data[x].type == 1 || data[x].type == 2) {
+        data[x].origX = xScale(parseFloat(data[x].x));
+        nodes.push(data[x]);
+        if (data[x].staff == 1) {
+          xHash[data[x].x] = data[x];
+        }
+        if (data[x].staff == 2) {
+          if (xHash[data[x].x]) {
+            data[x].mirror = xHash[data[x].x];
+            data[x].mirror.mirror = data[x];
+          }
+        }
+        if (firstNotes[data[x].staff]) {
+            if (parseFloat(firstNotes[data[x].staff].x) > parseFloat(data[x].x)) {
+              firstNotes[data[x].staff] = data[x];
+            }
+          }
+          else {
+              firstNotes[data[x].staff] = data[x];            
+          }
+        if (lastNotes[data[x].staff]) {
+            if (parseFloat(lastNotes[data[x].staff].x) < parseFloat(data[x].x)) {
+              lastNotes[data[x].staff] = data[x];
+            }
+          }
+          else {
+              lastNotes[data[x].staff] = data[x];            
+          }
+      }
+    }
+    
+    for (x in nodes) {
+      nodes[x].x = 250;
+      if (nodes[parseInt(x) + 1]) {
+        if (nodes[parseInt(x) + 1].staff == nodes[x].staff) {
+          links.push({source: nodes[x], target: nodes[parseInt(x) + 1], weight: nodes.p7})
+        }
+      }
+    }
+    
+    force = d3.layout.force().size([1000,1000]).nodes(nodes).links(links).on("tick", updateForce).chargeDistance(30)
+//    .charge(100)
+    .charge(function(d) {return parseFloat(d.p7) * 100})
+    .linkDistance(10).gravity(0);
+    
+    d3.select("svg").selectAll("line").data(links).enter().append("line");
+
+    d3.select("svg").selectAll("circle").data(nodes).enter().append("circle").attr("r", 5).call(force.drag);
+    
+    function updateForce() {
+      d3.selectAll("circle")
+      .attr("cy", function (d) {return staffScale(d.staff)})
+      .attr("cx", function (d) {return d.x})
+      .style("fill", function(d) {return d.mirror ? "red" : "black"})
+      .each(function(d,i) {
+        d.py = staffScale(d.staff);
+        d.y = staffScale(d.staff);
+        if (d.mirror) {
+          d.x = (d.mirror.x + d.x) / 2;
+          d.px = (d.mirror.px + d.px) /2;
+        }
+      })
+      
+      d3.selectAll("line")
+      .attr("x1", function(d) {return d.source.x})
+      .attr("x2", function(d) {return d.target.x})
+      .attr("y1", function(d) {return d.source.y})
+      .attr("y2", function(d) {return d.target.y})
+    }
+    force.start();
+    for (x in nodes) {
+      nodes[x].x = nodes[x].origX * 2;
+      nodes[x].px = nodes[x].origX * 2;
+      for (y in firstNotes) {
+        firstNotes[y].fixed = true;
+      }
+      for (y in lastNotes) {
+        lastNotes[y].fixed = true;
+      }
+    }
+  }
+
+</script>
+  </footer>
+</body>
+</html>

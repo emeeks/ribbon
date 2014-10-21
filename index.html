@@ -1,0 +1,496 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>Ribbon Visualization</title>
+  <meta charset="utf-8" />
+</head>
+<script src="d3.v3.min.js"></script>
+<script src="colorbrewer.js"></script>
+<script src="queue.js"></script>
+<style>
+  body, html {
+    width:100%;
+    height:100%;
+  }
+  #vizcontainer {
+    width:100%;
+    height:100%;
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+  line {
+    shape-rendering: crispEdges;
+  }
+
+
+  path.domain {
+    fill: none;
+  }
+  g.tick > line {
+    stroke: gray;
+    stroke-width: 1px;
+  }
+  button {
+    position: fixed;
+    top: 20px;
+  }
+  #hoverDetails {
+    position: fixed;
+    z-index: 3;
+    bottom: 20px;
+    left: 20px;
+  }
+  rect.bg {
+    fill-opacity: 0.02;
+  }
+</style>
+<body onload="ribbonTest1(1);">
+
+<div id="vizcontainer">
+<svg>
+  <defs>
+  </defs>
+  <g id="axes"></g>
+  <g id="proll"></g>
+  <g id="ribbons"></g>
+  <g id="annotation"></g>
+</svg>
+</div>
+<div id="hoverDetails"></div>
+  <footer>
+<script>
+  function ribbonTest1(setSmooth) {
+    queue()
+    .defer(d3.json, "http://josquin.stanford.edu/cgi-bin/jrp?a=avgpitch-json&f=Jos2721")
+    .defer(d3.json, "http://josquin.stanford.edu/cgi-bin/jrp?a=proll-json&f=Jos2721")
+    .await(function(error, file1, file2) { createRibbons(setSmooth, file1, file2); });
+  }
+
+  function createRibbons(setSmooth, ribbonData, prollData) {
+    
+    vizHeight = 600;
+    vizWidth = 500;
+    
+    currentScale = 1;
+    
+    ribbonType = "quartile";
+    prollBuffer = 0;
+
+    partColors = [
+      colorbrewer.Reds[3],
+      colorbrewer.Purples[3],
+      colorbrewer.Blues[3],
+      colorbrewer.Greys[3],
+      colorbrewer.Oranges[3],
+      colorbrewer.Greens[3]
+    ]
+    console.log(ribbonData)
+    smoothing = 2;
+    
+    for (x in ribbonData.partnames) {
+      ribbonData.partnames[x] = ribbonData.partnames[x].replace(" ", "_")
+    }
+    frames = ribbonData.framedata;
+    parts = ribbonData.partnames;
+    rolldata = prollData.partdata;
+    rollparts = prollData.partnames;
+    
+    indexExtent = d3.extent(frames, function(d) {return d.frameindex})
+    xScale = d3.scale.linear().domain(indexExtent).range([0,vizWidth])
+    scaledXScale = d3.scale.linear().domain(indexExtent).range([0,vizWidth])
+
+    barlinesData = prollData.barlines;
+    barlinesArray = barlinesData.map(function(d) {return d.time[0]})
+    barlinesValues = barlinesData.map(function(d) {return d.label})
+    barlinesMensuration = barlinesData.map(function(d) {return d.mensuration})
+//    partColors = d3.scale.category10();
+
+    //The Actual Visualization
+    for (var x in parts) {
+      partName = parts[x];
+      d3.select("#axes").append("g")
+      .attr("class", "part " + partName)
+
+      d3.select("#ribbons").append("g")
+      .attr("class", "part " + partName)
+
+      d3.select("#ribbons").select("g." + partName)
+      .selectAll("path.pitchsdArea")
+      .data([frames])
+      .enter()
+      .append("path")
+      .attr("class", "pitchsdArea")
+      .attr("partnumber", x);
+
+      d3.select("#ribbons").select("g." + partName)
+      .selectAll("path.pitchLine")
+      .data([frames])
+      .enter()
+      .append("path")
+      .attr("class", "pitchLine")
+      .attr("partnumber", x)
+      .style("pointer-events", "none")
+      .style("fill", "none")
+      .style("stroke", "white")
+      .style("stroke-width", function() {return x == 0 ? "2px" : "2px"})
+//      .style("display", "none")
+
+    d3.select("defs").append("clipPath").attr("id", "clip" + x).append("path");
+
+    }
+    ribbonZoom = d3.behavior.zoom().on("zoom", zoomUpdate).on("zoomstart", zoomStart).on("zoomend", zoomEnd);
+
+    pRollVisualization();
+    annotationBar();
+    redraw();
+  
+  d3.select("svg").call(ribbonZoom);
+  d3.select("svg").on("mousemove",scoreOver).insert("rect", "g").attr("height", 10000).attr("width", 10000).attr("x", -5000).attr("y",-5000).attr("class","bg").style("pointer-events", "auto");
+  window.onresize = function() {
+    redraw();
+  }
+  function redraw(optionalDuration) {
+    var tTime = optionalDuration || 0;
+    var s = ribbonZoom.scale();
+    vizHeight = parseFloat(d3.select("svg").node().clientHeight || d3.select("svg").node().parentNode.clientHeight) - 100;
+    vizWidth = parseFloat(d3.select("svg").node().clientWidth || d3.select("svg").node().parentNode.clientWidth) - 50;
+    scaledVizWidth = s * parseFloat(d3.select("svg").node().clientWidth || d3.select("svg").node().parentNode.clientWidth) - 50;
+    xScale.range([0,vizWidth])
+    scaledXScale.range([0,scaledVizWidth])
+
+    adjustSmoothing(setSmooth);
+
+    var partOffset = (vizHeight / parts.length) + 20;
+      for (var x in parts) {
+      partName = parts[x];
+      
+      d3.select("#axes").select("g." + partName)
+      .transition()
+      .duration(tTime)
+      .attr("transform", "translate(0," + (x * partOffset) + ")");
+
+      d3.select("#ribbons").select("g." + partName)
+      .transition()
+      .duration(tTime)      
+      .attr("transform", "translate(0," + (x * partOffset) + ")");
+      
+      d3.select("#ribbons").select("g." + partName)
+      .selectAll("path.pitchsdArea")
+      .transition()
+      .duration(tTime)      
+      .style("fill", "none")
+      .style("stroke", function() {return x == parts.length - 1 ? "gray" : partColors[x][1]})
+      .style("stroke-width", function() {return x == 0 ? "4px" : "2px"})
+      .style("fill-opacity", function() {return x == 0 ? .1 : .5})
+    }
+    
+    for (var x in rollparts) {
+      partName = rollparts[x];
+      d3.select("#ribbons").select("g.r" + partName)
+      .transition()
+      .duration(tTime)      
+      .attr("transform", "translate(0," + ((x * partOffset)) + ")");
+
+      d3.select("#ribbons").select("g.r" + partName)
+      .selectAll("rect.proll")
+      .transition()
+      .duration(tTime)      
+      .attr("x", function(d){ return scaledXScale(d.starttime[0] / 2)})
+      .attr("y", function(d){ return pitchScale(d.pitch.b7) - 2})
+      .attr("width", function(d){ return scaledXScale(d.duration[0] / 2)});
+      
+    }
+
+    yAxis = d3.svg.axis().scale(pitchScale).orient("right").tickSize(vizWidth).tickSubdivide(false).tickFormat(staffAxisFormat);    
+    d3.select("#axes").selectAll("g.part").call(yAxis);
+    d3.selectAll("g.tick").filter(function(d) {return d == 28}).style("stroke-dasharray", "4 4");
+    
+        for (var x in parts) {
+      var pitchExtent = d3.extent(frames, function(d) {return d.partdata[x].pitchmean[smoothing]})
+      var pitchsdExtent = d3.extent(frames, function(d) {return d.partdata[x].pitchsd[smoothing]})    
+      
+      var pExtent = [pitchExtent[0] - pitchsdExtent[1],pitchExtent[1] + pitchsdExtent[1]]
+
+      console.log(parts[x])
+
+      if (parts[x] != "full_score") {
+        var pData = d3.select(".r" + parts[x]).selectAll("rect.proll").data();
+      
+        pExtent = d3.extent(pData, function(d) {return d.pitch.b7});
+        console.log(pExtent)
+      }
+
+
+/*      d3.select("g#axes").select("." + parts[x]).selectAll("g.tick").filter(function(d) {return d + 2 < pExtent[0] || d - 2 > pExtent[1]})
+      .remove(); */
+
+        d3.select("g#axes").select("." + parts[x]).selectAll("g.tick").filter(function(d) {return d != 28 && d != 24 && d != 32})
+      .remove();
+
+      console.log("???")
+      
+      d3.selectAll("line").style("stroke-width", "1px")
+
+        }
+
+  }
+  
+  function adjustSmoothing(newSmooth) {
+    smoothing = newSmooth;
+    pitchScale = [];
+    pitchsdScale = [];
+    pitchsdArea = [];
+
+    allPitch = [];
+    allPitchSD = [];
+    allAttacks = [];
+    voiceAttacks = [];
+    for (var x in parts) {
+      var pitchExtent = d3.extent(frames, function(d) {return d.partdata[x].pitchmean[smoothing]})
+      allPitch.push(pitchExtent);
+      var pitchsdExtent = d3.extent(frames, function(d) {return d.partdata[x].pitchsd[smoothing]})    
+      allPitchSD.push(pitchsdExtent);
+      var attacksExtent = d3.extent(frames, function(d) {return d.partdata[x].attacks[smoothing]})    
+      allAttacks.push(attacksExtent);
+      
+      if (x != 0) {
+        var vAttacksExtent = d3.extent(frames, function(d) {return d.partdata[x].attacks[smoothing]})    
+        voiceAttacks.push(vAttacksExtent);
+        
+      }
+      
+
+    }
+    minPitchSD = d3.min(allPitchSD, function (d) {return d[0]})
+    maxPitchSD = d3.max(allPitchSD, function (d) {return d[1]})
+    minPitch = d3.min(allPitch, function (d) {return d[0]})
+    maxPitch = d3.max(allPitch, function (d) {return d[1]})
+    minAttacks = d3.min(allAttacks, function (d) {return d[0]})
+    maxAttacks = d3.max(allAttacks, function (d) {return d[1]})
+    minVAttacks = d3.min(voiceAttacks, function (d) {return d[0]})
+    maxVAttacks = d3.max(voiceAttacks, function (d) {return d[1]})
+    
+    pitchScale = d3.scale.linear().domain([18,maxPitch + maxPitchSD]).range([vizHeight / parts.length,0])
+    attacksScaleArray = [];
+
+  d3.selectAll("path.pitchsdArea")
+  .each(function(d) {
+    var _part = d3.select(this).attr("partnumber");
+
+  var pitchsdArea = d3.svg.area()
+    .interpolate("linear")
+    .x(function(d) { return scaledXScale(d.frameindex); })
+    .y0(function(d) { return pitchScale(d.partdata[_part].pitch75q[smoothing]) })
+    .y1(function(d) { return pitchScale(d.partdata[_part].pitch25q[smoothing]) });
+
+    if (ribbonType == "standardDeviation") {
+  var pitchsdArea = d3.svg.area()
+    .interpolate("linear")
+    .x(function(d) { return scaledXScale(d.frameindex); })
+    .y0(function(d) { return pitchScale(d.partdata[_part].pitchmean[smoothing] - d.partdata[_part].pitchsd[smoothing]) })
+    .y1(function(d) { return pitchScale(d.partdata[_part].pitchmean[smoothing] + d.partdata[_part].pitchsd[smoothing]) });
+      
+    }
+
+    d3.select(this).attr("d", pitchsdArea(d));
+    
+    d3.select("defs").select("#clip" + _part).select("path").attr("d", pitchsdArea(d));
+  })
+  
+    d3.selectAll("path.pitchLine")
+  .each(function(d) {
+    var _part = d3.select(this).attr("partnumber");
+
+  var pitchLine = d3.svg.line()
+    .interpolate("linear")
+    .x(function(d) { return scaledXScale(d.frameindex); })
+    .y(function(d) { return pitchScale(d.partdata[_part].pitchmean[smoothing]) })
+
+    d3.select(this).attr("d", pitchLine(d));
+  })
+  
+      for (var x in parts) {
+    var voronoi = d3.geom.voronoi()
+    .x(function(d) {return scaledXScale(d.frameindex)})
+    .y(function(d){return pitchScale(d.partdata[x].pitchmean[smoothing])})
+    .clipExtent([[0,0],[scaledVizWidth,vizHeight/parts.length]])
+
+      var vData = voronoi(frames).map(function(d,i) {
+        return {voronoiData: d, voronoiPath: "M" + d.join("L") + "Z", data: frames[i].partdata[x], color: partColors[x][1]}
+      })
+
+      var pColor = partColors[x][1];
+      var bAttacksScale = d3.scale.linear().domain([minAttacks,maxAttacks]).range([partColors[x][0], partColors[x][2]]);        
+      if (x != 0) {
+        bAttacksScale.domain([minVAttacks,maxVAttacks]);        
+      }
+
+      d3.select("#ribbons").select("g." + parts[x]).selectAll("path.voronoi")
+        .data(vData)
+        .enter()
+       .insert("path", ".pitchLine")
+        .attr("class", "voronoi")
+        .attr("clip-path", "url(#clip" +x+")")
+        .style("stroke-width", "1px");
+        
+      d3.select("#ribbons").select("g." + parts[x]).selectAll("path.voronoi")
+        .data(vData)
+        .exit()
+        .remove();
+
+      d3.select("#ribbons").select("g." + parts[x]).selectAll("path.voronoi")
+        .attr("d", function(d) { return d.voronoiPath })
+        .style("fill", function(d,i) {return bAttacksScale(d.data.attacks[smoothing])})
+        .style("stroke", function(d,i) {return bAttacksScale(d.data.attacks[smoothing])})
+//        .on("mouseout",  vorOut)
+        
+        function vorOver(d) {
+//          d3.select(this).style("fill", "red")
+//          d3.select("#hoverDetails").html("Start Frame: " + d.data.startframe[smoothing] + ", End Frame: " + d.data.endframe[smoothing] + ", Pitch (mean): " + d.data.pitchmean[smoothing] + ", Pitch (STD): " + d.data.pitchsd[smoothing] + ", Attacks: " + d.data.attacks[smoothing])
+
+//          d3.selectAll("path.voronoi").filter(function(p) {return p.data.startframe >= d.data.startframe && p.data.endframe <= d.data.endframe}).style("fill", "red")
+          d3.select("#annotationBarStart").attr("x1", scaledXScale(d.data.startframe[smoothing])).attr("x2", scaledXScale(d.data.startframe[smoothing]))
+          d3.select("#annotationBarEnd").attr("x1", scaledXScale(d.data.endframe[smoothing])).attr("x2", scaledXScale(d.data.endframe[smoothing]))
+        }
+
+        function vorOut() {
+          d3.selectAll("path.voronoi").each(function(d) {
+            var AS = d3.scale.linear().domain([minAttacks,maxAttacks]).range([partColors[x][0], partColors[x][2]]);
+            d3.select(this).style("fill", function(d,i) {return AS(d.data.attacks[smoothing])})
+            
+          })
+        }
+
+    }
+  
+  
+  d3.select("#vizcontainer").append("button").on("click", combineRibbons).html("combine").style("left", "20px")
+  d3.select("#vizcontainer").append("button").on("click", separateRibbons).html("separate").style("left", "80px")
+
+
+  function combineRibbons() {
+  d3.selectAll("path.voronoi").style("display", "none");
+  setTimeout(function() {d3.selectAll("path.voronoi").style("display", "block");},2010)
+
+  d3.selectAll("g.part").transition().duration(2000).attr("transform", function(d,i) {return i == 0 ? "translate(0,300)" : "translate(0,300)"})
+  d3.selectAll("g.rollpart").transition().duration(2000).attr("transform", function(d,i) {return i == 0 ? "translate(0,300)" : "translate(0,300)"})
+  
+  d3.selectAll("g.rollpart").each(function(d) {
+    var _part = d3.select(this).attr("partnumber");
+    d3.select(this).selectAll("rect").transition().duration(2000).style("fill", partColors[_part][1]).style("fill-opacity", .75).style("stroke", "black").style("stroke-opacity", .75)
+  })
+  }
+  
+  function separateRibbons() {
+  //Tie to redraw
+  d3.selectAll("path.voronoi").style("display", "none");
+  setTimeout(function() {d3.selectAll("path.voronoi").style("display", "block");},2010)
+  redraw(2000);    
+  }
+
+  }
+  
+  function annotationBar() {
+    d3.select("#annotation").append("line").attr("id", "annotationBarStart")
+    .attr("x1", 50).attr("x2", 50).attr("y1", 0).attr("y2", 1000).style("stroke", "black").style("stroke-width", "2px")
+    d3.select("#annotation").append("line").attr("id", "annotationBarEnd")
+    .attr("x1", 50).attr("x2", 50).attr("y1", 0).attr("y2", 1000).style("stroke", "black").style("stroke-width", "2px")
+  }
+  
+  function pRollVisualization() {
+
+    //The Actual Visualization
+    for (var x in rollparts) {
+      partName = rollparts[x];
+
+      d3.select("#ribbons").append("g")
+      .attr("class", "rollpart r" + partName)
+      .attr("partnumber", parseInt(x) + 1)
+      .selectAll("rect.proll")
+      .data(rolldata[x].notedata)
+      .enter()
+      .append("rect")
+      .attr("class", "proll")
+      .attr("partnumber", parseInt(x) + 1)
+      .style("fill", "black")
+      .attr("height", 4)
+      .style("stroke", "black")
+      .style("stroke-width", "1px")
+      .style("fill-opacity", .25)
+
+    }
+    highLow();
+  }
+
+function highLow() {
+
+    for (var x in rollparts) {
+      partName = rollparts[x];
+      var prollD = d3.select("g.r" + partName).selectAll("rect.proll").data();
+      var prollEx = d3.extent(prollD, function(d) {return parseInt(d.pitch.b7)});
+      prollEx = [prollEx[0] + prollBuffer, prollEx[1] - prollBuffer]
+//      console.log(prollEx)
+      d3.select("g.r" + partName).selectAll("rect.proll")
+//      .filter(function(d) {return prollEx.indexOf(d.pitch.b7) > -1})
+      .filter(function(d) {return prollEx[0] >= parseInt(d.pitch.b7) || prollEx[1] <= parseInt(d.pitch.b7)})
+      .style("stroke", "red")
+      .style("stroke-width", "4px")
+    }
+  
+}
+
+function zoomStart() {
+        d3.selectAll("path.voronoi").style("display", "none");
+}
+function zoomEnd() {
+        d3.selectAll("path.voronoi").style("display", "block");
+}
+
+    function zoomUpdate() {
+    t = ribbonZoom.translate();
+    d3.selectAll("svg > g").attr("transform", "translate("+t+")")
+    d3.select("g#axes").attr("transform", "translate(0,"+t[1]+")")
+    
+    if (currentScale != ribbonZoom.scale()) {
+          currentScale = ribbonZoom.scale();
+          redraw();
+    }
+  }
+  
+  function scoreOver(d) {
+
+          var m = d3.mouse(this);
+          var t = ribbonZoom.translate();
+          var xx = m[0] - t[0];
+          var sP = smoothing * (vizWidth / 20);
+
+          d3.select("#annotationBarStart").attr("x1", xx - (sP/2)).attr("x2", xx - (sP/2))
+          d3.select("#annotationBarEnd").attr("x1", xx + (sP/2)).attr("x2", xx + (sP/2))
+          
+  }
+  
+  }
+  
+  function staffAxisFormat(num) {
+    var staffLabels =
+    { "38": "F",
+      "36": "D5",
+      "34": "B",
+      "32": "G",
+      "30": "E",
+      "28": "C4",
+      "26": "A",
+      "24": "F",
+      "22": "D3",
+      "20": "B",
+      "18": "G"
+    }
+    return staffLabels[num];
+  }
+  
+
+</script>
+  </footer>
+</body>
+</html>
