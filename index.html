@@ -62,8 +62,8 @@
 <script>
   function ribbonTest1(setSmooth) {
     queue()
-    .defer(d3.json, "http://josquin.stanford.edu/cgi-bin/jrp?a=avgpitch-json&f=Jos2721")
-    .defer(d3.json, "http://josquin.stanford.edu/cgi-bin/jrp?a=proll-json&f=Jos2721")
+    .defer(d3.json, "ribdata.json")
+    .defer(d3.json, "proll.json")
     .await(function(error, file1, file2) { createRibbons(setSmooth, file1, file2); });
   }
 
