@@ -23,7 +23,6 @@
     shape-rendering: crispEdges;
   }
 
-
   path.domain {
     fill: none;
   }
@@ -108,13 +107,23 @@
 
     smoothing = 2;
     
-    for (x in ribbonData.partnames) {
-      ribbonData.partnames[x] = ribbonData.partnames[x].replace(" ", "_")
-    }
     frames = ribbonData.framedata;
     parts = ribbonData.partnames;
     rolldata = prollData.partdata;
     rollparts = prollData.partnames;
+
+    for (x in parts) {
+      parts[x] = parts[x].replace(" ", "_");
+      for (y in frames) {
+        if (y != 0) {
+          if (frames[y].partdata[x].pitchmean == 0) {
+            frames[y].partdata[x].pitchmean = frames[y - 1].partdata[x].pitchmean;
+            frames[y].partdata[x].pitch25q = frames[y - 1].partdata[x].pitchmean;
+            frames[y].partdata[x].pitch75q = frames[y - 1].partdata[x].pitchmean;
+          }
+        }
+      }
+    }
     
     indexExtent = d3.extent(frames, function(d) {return d.frameindex})
     xScale = d3.scale.linear().domain(indexExtent).range([0,vizWidth])
@@ -124,7 +133,6 @@
     barlinesArray = barlinesData.map(function(d) {return d.time[0]})
     barlinesValues = barlinesData.map(function(d) {return d.label})
     barlinesMensuration = barlinesData.map(function(d) {return d.mensuration})
-//    partColors = d3.scale.category10();
 
     //The Actual Visualization
     for (var x in parts) {
@@ -232,13 +240,11 @@
       
       var pExtent = [pitchExtent[0] - pitchsdExtent[1],pitchExtent[1] + pitchsdExtent[1]]
 
-      console.log(parts[x])
 
       if (parts[x] != "full_score") {
         var pData = d3.select(".r" + parts[x]).selectAll("rect.proll").data();
       
         pExtent = d3.extent(pData, function(d) {return d.pitch.b7});
-        console.log(pExtent)
       }
 
 
@@ -248,8 +254,6 @@
         d3.select("g#axes").select("." + parts[x]).selectAll("g.tick").filter(function(d) {return d != 28 && d != 24 && d != 32})
       .remove();
 
-      console.log("???")
-      
       d3.selectAll("line").style("stroke-width", "1px")
 
         }
@@ -450,7 +454,6 @@ function highLow() {
       var prollD = d3.select("g.r" + partName).selectAll("rect.proll").data();
       var prollEx = d3.extent(prollD, function(d) {return parseInt(d.pitch.b7)});
       prollEx = [prollEx[0] + prollBuffer, prollEx[1] - prollBuffer]
-//      console.log(prollEx)
       d3.select("g.r" + partName).selectAll("rect.proll")
 //      .filter(function(d) {return prollEx.indexOf(d.pitch.b7) > -1})
       .filter(function(d) {return prollEx[0] >= parseInt(d.pitch.b7) || prollEx[1] <= parseInt(d.pitch.b7)})
