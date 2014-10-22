@@ -45,47 +45,67 @@
     fill-opacity: 0.02;
   }
 </style>
-<body onload="ribbonTest1(1);">
+<body onload="ribbonTest1(1, 1, 'standardDeviation', 'vizcontainer');">
 
 <div id="vizcontainer">
-<svg>
-  <defs>
-  </defs>
-  <g id="axes"></g>
-  <g id="proll"></g>
-  <g id="ribbons"></g>
-  <g id="annotation"></g>
-</svg>
 </div>
 <div id="hoverDetails"></div>
   <footer>
 <script>
-  function ribbonTest1(setSmooth) {
+  function ribbonTest1(setSmooth, prollBuffer, ribbonType, divID) {
     queue()
     .defer(d3.json, "ribdata.json")
     .defer(d3.json, "proll.json")
-    .await(function(error, file1, file2) { createRibbons(setSmooth, file1, file2); });
+    .await(function(error, file1, file2) { createRibbons(setSmooth, prollBuffer, ribbonType, divID, file1, file2); });
   }
 
-  function createRibbons(setSmooth, ribbonData, prollData) {
+  function createRibbons(setSmooth, prollBuffer, ribbonType, divID, ribbonData, prollData) {
+
+    d3.select("#" + divID).selectAll("svg")
+    .remove();
     
+    d3.select("#" + divID)
+    .append("svg")
+    .append("defs");
+    
+    var svg = d3.select("#" + divID).select("svg");
+    
+    svg.append("g").attr("id", "axes");
+    svg.append("g").attr("id", "proll");
+    svg.append("g").attr("id", "ribbons");
+    svg.append("g").attr("id", "annotation");
+        
     vizHeight = 600;
     vizWidth = 500;
     
     currentScale = 1;
-    
-    ribbonType = "quartile";
-    prollBuffer = 0;
 
     partColors = [
       colorbrewer.Reds[3],
       colorbrewer.Purples[3],
       colorbrewer.Blues[3],
-      colorbrewer.Greys[3],
+      colorbrewer.Oranges[3],
+      colorbrewer.Greens[3],
+      colorbrewer.Reds[3],
+      colorbrewer.Purples[3],
+      colorbrewer.Blues[3],
+      colorbrewer.Oranges[3],
+      colorbrewer.Greens[3],
+      colorbrewer.Reds[3],
+      colorbrewer.Purples[3],
+      colorbrewer.Blues[3],
+      colorbrewer.Oranges[3],
+      colorbrewer.Greens[3],
+      colorbrewer.Reds[3],
+      colorbrewer.Purples[3],
+      colorbrewer.Blues[3],
       colorbrewer.Oranges[3],
       colorbrewer.Greens[3]
     ]
-    console.log(ribbonData)
+    
+    partColors = partColors.splice(0,ribbonData.partnames.length - 1);
+    partColors.push(colorbrewer.Greys[3]);
+
     smoothing = 2;
     
     for (x in ribbonData.partnames) {
