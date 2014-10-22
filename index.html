@@ -6,6 +6,8 @@
 <script src="d3.v3.min.js"></script>
 <script src="colorbrewer.js"></script>
 <script src="queue.js"></script>
+<script src="/scripts/scripts-common.js"></script>
+<script src="craig.js"></script>
 <style>
   body, html {
     width:100%;
@@ -46,15 +48,24 @@
 </style>
 <body onload="ribbonTest1(1, 1, 'standardDeviation', 'vizcontainer');">
 
+<div id="workinfo"></div>
 <div id="vizcontainer">
 </div>
 <div id="hoverDetails"></div>
   <footer>
 <script>
+
   function ribbonTest1(setSmooth, prollBuffer, ribbonType, divID) {
+    var jrpid = getJrpid();
+    displayWorkInfo("workinfo", jrpid);
+    var prolllink     = "http://josquin.stanford.edu/cgi-bin/jrp?a=";
+    var avgpitchlink  = prolllink;
+    avgpitchlink += "avgpitch-json&id=" + jrpid;
+    prolllink    += "proll-json&id="    + jrpid;
+
     queue()
-    .defer(d3.json, "ribdata.json")
-    .defer(d3.json, "proll.json")
+    .defer(d3.json, avgpitchlink)
+    .defer(d3.json, prolllink)
     .await(function(error, file1, file2) { createRibbons(setSmooth, prollBuffer, ribbonType, divID, file1, file2); });
   }
 
